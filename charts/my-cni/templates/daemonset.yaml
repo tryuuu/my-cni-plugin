@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-cni
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: my-cni
+  template:
+    metadata:
+      labels:
+        app: my-cni
+    spec:
+      hostNetwork: true
+      serviceAccountName: my-cni
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      initContainers:
+        - name: install-cni
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/install-cni"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: cni-bin
+              mountPath: /opt/cni/bin
+            - name: cni-conf
+              mountPath: /etc/cni/net.d
+          securityContext:
+            privileged: true
+      containers:
+        - name: route-controller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/route-controller"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+      volumes:
+        - name: cni-bin
+          hostPath:
+            path: /opt/cni/bin
+            type: DirectoryOrCreate
+        - name: cni-conf
+          hostPath:
+            path: /etc/cni/net.d
+            type: DirectoryOrCreate

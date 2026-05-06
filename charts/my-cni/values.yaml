@@ -1,0 +1,4 @@
+image:
+  repository: ghcr.io/tryuuu/my-cni-plugin
+  tag: latest
+  pullPolicy: IfNotPresent
