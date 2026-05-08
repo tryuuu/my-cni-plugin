@@ -81,7 +81,7 @@ func main() {
 
 	stopCh := make(chan struct{})
 	factory.Start(stopCh)
-	factory.WaitForCacheSync(stopCh)
+	cache.WaitForCacheSync(stopCh, factory.Core().V1().Nodes().Informer().HasSynced)
 	fmt.Println("route-controller started")
 	<-stopCh
 }
