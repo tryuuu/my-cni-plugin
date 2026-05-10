@@ -26,8 +26,21 @@ func main() {
 	}
 
 	store := networkpolicy.NewStore()
+	ipt, err := networkpolicy.NewIPTablesManager()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "iptables setup: %v\n", err)
+		os.Exit(1)
+	}
+	if err := ipt.EnsureBaseChains(); err != nil {
+		fmt.Fprintf(os.Stderr, "iptables base chains: %v\n", err)
+		os.Exit(1)
+	}
+
+	evaluator := networkpolicy.NewEvaluator(store)
+	reconciler := networkpolicy.NewReconciler(store, evaluator, ipt)
+
 	factory := informers.NewSharedInformerFactory(clientset, 10*time.Minute)
-	networkpolicy.SetupWatcher(factory, store, nil)
+	networkpolicy.SetupWatcher(factory, store, reconciler)
 
 	stopCh := make(chan struct{})
 	factory.Start(stopCh)
@@ -38,5 +51,6 @@ func main() {
 		factory.Networking().V1().NetworkPolicies().Informer().HasSynced,
 	)
 	fmt.Println("network-policy-controller started")
+	go reconciler.Run(stopCh)
 	<-stopCh
 }
