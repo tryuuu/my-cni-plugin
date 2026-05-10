@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/containernetworking/cni v1.3.0
 	github.com/containernetworking/plugins v1.9.1
+	github.com/coreos/go-iptables v0.8.0
 	github.com/vishvananda/netlink v1.3.1
 	k8s.io/api v0.32.3
 	k8s.io/apimachinery v0.32.3
