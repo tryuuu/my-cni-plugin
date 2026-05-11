@@ -58,6 +58,19 @@ func (m *iptablesManager) EnsureBaseChains() error {
 			return fmt.Errorf("insert FORWARD rule: %w", err)
 		}
 	}
+
+	// Accept return traffic for established connections before per-pod chains.
+	// Without this, response packets hit the sender's egress DROP rule.
+	ctExists, err := m.ipt.Exists("filter", forwardChain, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT")
+	if err != nil {
+		return fmt.Errorf("check conntrack rule: %w", err)
+	}
+	if !ctExists {
+		if err := m.ipt.Insert("filter", forwardChain, 1, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"); err != nil {
+			return fmt.Errorf("insert conntrack rule: %w", err)
+		}
+	}
+
 	return nil
 }
 
