@@ -25,12 +25,13 @@ func NewReconciler(store Store, evaluator Evaluator, ipt IPTablesManager) *Recon
 }
 
 func (r *Reconciler) Enqueue(event Event) {
-	r.queue.Add(event)
+	r.queue.Add(&event)
 }
 
 func (r *Reconciler) Run(stopCh <-chan struct{}) {
 	defer r.queue.ShutDown()
-	r.queue.Add(Event{Type: EventFullResync})
+	e := Event{Type: EventFullResync}
+	r.queue.Add(&e)
 	go wait.Until(r.worker, time.Second, stopCh)
 	<-stopCh
 }
@@ -47,8 +48,8 @@ func (r *Reconciler) processNextItem() bool {
 	}
 	defer r.queue.Done(item)
 
-	event := item.(Event)
-	if err := r.reconcile(event); err != nil {
+	event := item.(*Event)
+	if err := r.reconcile(*event); err != nil {
 		fmt.Printf("[reconciler] error: %v, requeuing\n", err)
 		r.queue.AddRateLimited(item)
 		return true
