@@ -3,7 +3,17 @@ entries:
   my-cni:
   - apiVersion: v2
     appVersion: latest
-    created: "2026-05-11T01:40:01.789661003Z"
+    created: "2026-05-11T02:06:32.424753106Z"
+    description: A custom CNI plugin for home Kubernetes cluster
+    digest: 42cd088fe48fc53ec6f6fa11f57a84804b3003805eedc3a1af3fffab2b52094d
+    name: my-cni
+    type: application
+    urls:
+    - https://tryuuu.github.io/my-cni-plugin/my-cni-0.2.0.tgz
+    version: 0.2.0
+  - apiVersion: v2
+    appVersion: latest
+    created: "2026-05-11T02:06:32.424566447Z"
     description: A custom CNI plugin for home Kubernetes cluster
     digest: c0211d9c0c2b7d252adef5bc428e8c6943c946f646a0823df58fc0163863385b
     name: my-cni
@@ -11,4 +21,4 @@ entries:
     urls:
     - https://tryuuu.github.io/my-cni-plugin/my-cni-0.1.0.tgz
     version: 0.1.0
-generated: "2026-05-11T01:40:01.789314589Z"
+generated: "2026-05-11T02:06:32.424249485Z"
