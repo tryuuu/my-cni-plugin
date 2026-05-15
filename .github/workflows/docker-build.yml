@@ -10,7 +10,7 @@ env:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: my-runner
     permissions:
       contents: read
       packages: write
@@ -23,9 +23,6 @@ jobs:
       - name: Set image tag
         id: meta
         run: echo "tag=$(echo $GITHUB_SHA | head -c7)" >> $GITHUB_OUTPUT
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
