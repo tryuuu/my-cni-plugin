@@ -72,6 +72,12 @@ func (r *Reconciler) reconcile(event Event) error {
 		return nil
 	}
 
+	// Pod の追加・更新時は IP が変わる可能性があるため、他 Pod の NetworkPolicy ルールも
+	// 再評価が必要。例: envoy Pod 再起動 → frontend の許可送信元 IP が古いまま になるのを防ぐ。
+	if event.Type == EventPodAdded || event.Type == EventPodUpdated {
+		return r.fullResync()
+	}
+
 	podIPs := event.PodIPs
 	if event.Type == EventPolicyChanged || event.Type == EventNSChanged {
 		pods := r.store.ListPodsByNamespace(event.Namespace)
