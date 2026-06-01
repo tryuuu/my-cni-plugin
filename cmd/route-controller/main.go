@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -39,7 +42,13 @@ func main() {
 	nodeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			node := obj.(*corev1.Node)
-			if node.Name == nodeName || node.Spec.PodCIDR == "" {
+			if node.Name == nodeName {
+				if err := setNetworkAvailable(clientset, nodeName); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to set NetworkUnavailable=False: %v\n", err)
+				}
+				return
+			}
+			if node.Spec.PodCIDR == "" {
 				return
 			}
 			if err := syncRoute(node, true); err != nil {
@@ -84,6 +93,33 @@ func main() {
 	cache.WaitForCacheSync(stopCh, factory.Core().V1().Nodes().Informer().HasSynced)
 	fmt.Println("route-controller started")
 	<-stopCh
+}
+
+func setNetworkAvailable(clientset kubernetes.Interface, nodeName string) error {
+	now := metav1.Now()
+	condition := corev1.NodeCondition{
+		Type:               corev1.NodeNetworkUnavailable,
+		Status:             corev1.ConditionFalse,
+		Reason:             "RouteCreated",
+		Message:            "my-cni route-controller has set up routes",
+		LastTransitionTime: now,
+		LastHeartbeatTime:  now,
+	}
+	patch := map[string]interface{}{
+		"status": map[string]interface{}{
+			"conditions": []corev1.NodeCondition{condition},
+		},
+	}
+	data, err := json.Marshal(patch)
+	if err != nil {
+		return err
+	}
+	_, err = clientset.CoreV1().Nodes().PatchStatus(context.TODO(), nodeName, data)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("set NetworkUnavailable=False on node %s\n", nodeName)
+	return nil
 }
 
 func nodeInternalIP(node *corev1.Node) string {
