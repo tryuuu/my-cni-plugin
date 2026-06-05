@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-iptables/iptables"
@@ -97,10 +98,10 @@ func collect(ipt *iptables.IPTables, client kubernetes.Interface, nodeName strin
 	}
 	for _, rule := range fwdRules {
 		if m := forwardInRe.FindStringSubmatch(rule); m != nil {
-			chainMap[m[2]] = chainInfo{podIP: m[1], direction: "ingress"}
+			chainMap[m[2]] = chainInfo{podIP: strings.Split(m[1], "/")[0], direction: "ingress"}
 		}
 		if m := forwardEgRe.FindStringSubmatch(rule); m != nil {
-			chainMap[m[2]] = chainInfo{podIP: m[1], direction: "egress"}
+			chainMap[m[2]] = chainInfo{podIP: strings.Split(m[1], "/")[0], direction: "egress"}
 		}
 	}
 
