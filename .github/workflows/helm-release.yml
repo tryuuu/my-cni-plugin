@@ -21,6 +21,16 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
 
+      - name: Bump chart patch version
+        run: |
+          CURRENT=$(grep '^version:' charts/my-cni/Chart.yaml | awk '{print $2}')
+          MAJOR=$(echo $CURRENT | cut -d. -f1)
+          MINOR=$(echo $CURRENT | cut -d. -f2)
+          PATCH=$(echo $CURRENT | cut -d. -f3)
+          NEW="$MAJOR.$MINOR.$((PATCH + 1))"
+          sed -i "s/^version: .*/version: $NEW/" charts/my-cni/Chart.yaml
+          echo "Bumped version: $CURRENT -> $NEW"
+
       - name: Package chart
         run: |
           mkdir -p docs/
@@ -29,10 +39,10 @@ jobs:
       - name: Update Helm repo index
         run: helm repo index docs/ --url https://tryuuu.github.io/my-cni-plugin
 
-      - name: Commit and push docs/
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/
+          git add charts/my-cni/Chart.yaml docs/
           git diff --cached --quiet || git commit -m "chore: release helm chart $(helm show chart charts/my-cni | grep '^version:' | awk '{print $2}')"
           git push
