@@ -39,7 +39,7 @@ func main() {
 	evaluator := networkpolicy.NewEvaluator(store)
 	reconciler := networkpolicy.NewReconciler(store, evaluator, ipt)
 
-	factory := informers.NewSharedInformerFactory(clientset, 10*time.Minute)
+	factory := informers.NewSharedInformerFactory(clientset, 30*time.Second)
 	networkpolicy.SetupWatcher(factory, store, reconciler)
 
 	stopCh := make(chan struct{})
