@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-iptables/iptables"
@@ -19,10 +20,10 @@ import (
 )
 
 var (
-	dropPackets = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "nwplcy_drop_packets",
-			Help: "Number of packets dropped by NetworkPolicy per pod",
+	dropPackets = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "nwplcy_drop_packets_total",
+			Help: "Total number of packets dropped by NetworkPolicy per pod",
 		},
 		[]string{"dst_pod", "dst_namespace", "direction", "node"},
 	)
@@ -30,6 +31,27 @@ var (
 	forwardInRe = regexp.MustCompile(`-d (\S+) -j (KUBE-NWPLCY-IN-\S+)`)
 	forwardEgRe = regexp.MustCompile(`-s (\S+) -j (KUBE-NWPLCY-EG-\S+)`)
 )
+
+type prevCounters struct {
+	mu   sync.Mutex
+	vals map[string]int64
+}
+
+func (p *prevCounters) delta(key string, current int64) int64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	prev, ok := p.vals[key]
+	p.vals[key] = current
+	if !ok {
+		return current
+	}
+	if current >= prev {
+		return current - prev
+	}
+	return current
+}
+
+var prev = &prevCounters{vals: make(map[string]int64)}
 
 func main() {
 	nodeName := os.Getenv("NODE_NAME")
@@ -105,7 +127,6 @@ func collect(ipt *iptables.IPTables, client kubernetes.Interface, nodeName strin
 		}
 	}
 
-	dropPackets.Reset()
 	for chain, info := range chainMap {
 		rows, err := ipt.Stats("filter", chain)
 		if err != nil {
@@ -116,14 +137,16 @@ func collect(ipt *iptables.IPTables, client kubernetes.Interface, nodeName strin
 				continue
 			}
 			pkts, err := strconv.ParseInt(row[0], 10, 64)
-			if err != nil || pkts == 0 {
+			if err != nil {
 				continue
 			}
 			pod, ok := podByIP[info.podIP]
 			if !ok {
 				continue
 			}
-			dropPackets.WithLabelValues(pod[0], pod[1], info.direction, nodeName).Set(float64(pkts))
+			key := chain + "|" + info.direction
+			delta := prev.delta(key, pkts)
+			dropPackets.WithLabelValues(pod[0], pod[1], info.direction, nodeName).Add(float64(delta))
 		}
 	}
 	return nil
