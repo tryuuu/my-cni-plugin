@@ -24,7 +24,7 @@ var (
 			Name: "nwplcy_drop_packets",
 			Help: "Number of packets dropped by NetworkPolicy per pod",
 		},
-		[]string{"pod", "namespace", "direction", "node"},
+		[]string{"dst_pod", "dst_namespace", "direction", "node"},
 	)
 
 	forwardInRe = regexp.MustCompile(`-d (\S+) -j (KUBE-NWPLCY-IN-\S+)`)
