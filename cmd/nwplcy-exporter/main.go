@@ -7,7 +7,6 @@ import (
 	"os"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/coreos/go-iptables/iptables"
@@ -27,7 +26,6 @@ var (
 		[]string{"pod", "namespace", "direction", "node"},
 	)
 
-	counterRe   = regexp.MustCompile(`-c (\d+) \d+`)
 	forwardInRe = regexp.MustCompile(`-d (\S+) -j (KUBE-NWPLCY-IN-\S+)`)
 	forwardEgRe = regexp.MustCompile(`-s (\S+) -j (KUBE-NWPLCY-EG-\S+)`)
 )
@@ -93,7 +91,7 @@ func collect(ipt *iptables.IPTables, client kubernetes.Interface, nodeName strin
 	}
 	chainMap := make(map[string]chainInfo)
 
-	fwdRules, err := ipt.ListWithCounters("filter", "KUBE-NWPLCY-FORWARD")
+	fwdRules, err := ipt.List("filter", "KUBE-NWPLCY-FORWARD")
 	if err != nil {
 		return fmt.Errorf("list FORWARD: %w", err)
 	}
@@ -108,15 +106,15 @@ func collect(ipt *iptables.IPTables, client kubernetes.Interface, nodeName strin
 
 	dropPackets.Reset()
 	for chain, info := range chainMap {
-		rules, err := ipt.ListWithCounters("filter", chain)
+		rows, err := ipt.Stats("filter", chain)
 		if err != nil {
 			continue
 		}
-		for _, rule := range rules {
-			if !strings.Contains(rule, "-j DROP") {
+		for _, row := range rows {
+			if len(row) < 3 || row[2] != "DROP" {
 				continue
 			}
-			pkts, err := parsePackets(rule)
+			pkts, err := strconv.ParseInt(row[0], 10, 64)
 			if err != nil || pkts == 0 {
 				continue
 			}
@@ -128,12 +126,4 @@ func collect(ipt *iptables.IPTables, client kubernetes.Interface, nodeName strin
 		}
 	}
 	return nil
-}
-
-func parsePackets(rule string) (int64, error) {
-	m := counterRe.FindStringSubmatch(rule)
-	if m == nil {
-		return 0, fmt.Errorf("no counter in rule: %s", rule)
-	}
-	return strconv.ParseInt(m[1], 10, 64)
 }
