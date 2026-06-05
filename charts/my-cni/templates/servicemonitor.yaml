@@ -29,3 +29,6 @@ spec:
     - port: metrics
       path: /metrics
       interval: 30s
+      metricRelabelings:
+        - action: labeldrop
+          regex: (container|endpoint|instance|job|namespace|pod|prometheus|prometheus_replica|service)
