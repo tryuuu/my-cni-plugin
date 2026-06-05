@@ -32,16 +32,17 @@ var (
 	forwardEgRe = regexp.MustCompile(`-s (\S+) -j (KUBE-NWPLCY-EG-\S+)`)
 )
 
-type prevCounters struct {
-	mu   sync.Mutex
-	vals map[string]int64
+type collectorState struct {
+	mu           sync.Mutex
+	prevPkts     map[string]int64
+	activeLabels map[string][4]string // key -> [dst_pod, dst_namespace, direction, node]
 }
 
-func (p *prevCounters) delta(key string, current int64) int64 {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	prev, ok := p.vals[key]
-	p.vals[key] = current
+func (s *collectorState) delta(key string, current int64) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev, ok := s.prevPkts[key]
+	s.prevPkts[key] = current
 	if !ok {
 		return current
 	}
@@ -51,7 +52,22 @@ func (p *prevCounters) delta(key string, current int64) int64 {
 	return current
 }
 
-var prev = &prevCounters{vals: make(map[string]int64)}
+func (s *collectorState) cleanup(currentKeys map[string]bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, lbls := range s.activeLabels {
+		if !currentKeys[key] {
+			dropPackets.DeleteLabelValues(lbls[0], lbls[1], lbls[2], lbls[3])
+			delete(s.activeLabels, key)
+			delete(s.prevPkts, key)
+		}
+	}
+}
+
+var cstate = &collectorState{
+	prevPkts:     make(map[string]int64),
+	activeLabels: make(map[string][4]string),
+}
 
 func main() {
 	nodeName := os.Getenv("NODE_NAME")
@@ -127,6 +143,7 @@ func collect(ipt *iptables.IPTables, client kubernetes.Interface, nodeName strin
 		}
 	}
 
+	currentKeys := make(map[string]bool)
 	for chain, info := range chainMap {
 		rows, err := ipt.Stats("filter", chain)
 		if err != nil {
@@ -145,9 +162,15 @@ func collect(ipt *iptables.IPTables, client kubernetes.Interface, nodeName strin
 				continue
 			}
 			key := chain + "|" + info.direction
-			delta := prev.delta(key, pkts)
+			currentKeys[key] = true
+			cstate.mu.Lock()
+			cstate.activeLabels[key] = [4]string{pod[0], pod[1], info.direction, nodeName}
+			cstate.mu.Unlock()
+			delta := cstate.delta(key, pkts)
 			dropPackets.WithLabelValues(pod[0], pod[1], info.direction, nodeName).Add(float64(delta))
 		}
 	}
+
+	cstate.cleanup(currentKeys)
 	return nil
 }
