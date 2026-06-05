@@ -4,10 +4,54 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/coreos/go-iptables/iptables"
 )
+
+const hashCommentPrefix = "nwplcy-hash:"
+
+func hashRules(rules *PolicyRules) string {
+	var parts []string
+
+	ingress := make([]Rule, len(rules.IngressRules))
+	copy(ingress, rules.IngressRules)
+	sort.Slice(ingress, func(i, j int) bool {
+		return fmt.Sprintf("%v", ingress[i]) < fmt.Sprintf("%v", ingress[j])
+	})
+	for _, r := range ingress {
+		parts = append(parts, fmt.Sprintf("in:%s:%d:%s", r.CIDR, r.Port, r.Protocol))
+	}
+
+	egress := make([]Rule, len(rules.EgressRules))
+	copy(egress, rules.EgressRules)
+	sort.Slice(egress, func(i, j int) bool {
+		return fmt.Sprintf("%v", egress[i]) < fmt.Sprintf("%v", egress[j])
+	})
+	for _, r := range egress {
+		parts = append(parts, fmt.Sprintf("eg:%s:%d:%s", r.CIDR, r.Port, r.Protocol))
+	}
+
+	parts = append(parts, fmt.Sprintf("defaults:%v:%v", rules.IngressDefault, rules.EgressDefault))
+
+	h := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	return hex.EncodeToString(h[:])[:16]
+}
+
+func (m *iptablesManager) chainHashMatches(chain, hash string) bool {
+	rules, err := m.ipt.List("filter", chain)
+	if err != nil {
+		return false
+	}
+	comment := hashCommentPrefix + hash
+	for _, rule := range rules {
+		if strings.Contains(rule, comment) {
+			return true
+		}
+	}
+	return false
+}
 
 type IPTablesManager interface {
 	EnsureBaseChains() error
@@ -99,6 +143,11 @@ func (m *iptablesManager) SyncPod(rules *PolicyRules) error {
 		return fmt.Errorf("add egress jump: %w", err)
 	}
 
+	hash := hashRules(rules)
+	if m.chainHashMatches(ic, hash) && m.chainHashMatches(ec, hash) {
+		return nil
+	}
+
 	for _, chain := range []string{ic, ec} {
 		if err := m.ipt.ClearChain("filter", chain); err != nil {
 			return fmt.Errorf("flush chain %s: %w", chain, err)
@@ -116,13 +165,14 @@ func (m *iptablesManager) SyncPod(rules *PolicyRules) error {
 		}
 	}
 
+	comment := hashCommentPrefix + hash
 	if rules.IngressDefault {
-		if err := m.ipt.Append("filter", ic, "-j", "DROP"); err != nil {
+		if err := m.ipt.Append("filter", ic, "-m", "comment", "--comment", comment, "-j", "DROP"); err != nil {
 			return fmt.Errorf("append ingress drop: %w", err)
 		}
 	}
 	if rules.EgressDefault {
-		if err := m.ipt.Append("filter", ec, "-j", "DROP"); err != nil {
+		if err := m.ipt.Append("filter", ec, "-m", "comment", "--comment", comment, "-j", "DROP"); err != nil {
 			return fmt.Errorf("append egress drop: %w", err)
 		}
 	}
