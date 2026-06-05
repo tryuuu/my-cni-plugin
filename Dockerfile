@@ -7,6 +7,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/my-cni ./cmd/my-cni/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/install-cni ./cmd/install-cni/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/route-controller ./cmd/route-controller/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/network-policy-controller ./cmd/network-policy-controller/
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/nwplcy-exporter ./cmd/nwplcy-exporter/
 
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates iptables
@@ -14,3 +15,4 @@ COPY --from=builder /out/my-cni /my-cni
 COPY --from=builder /out/install-cni /install-cni
 COPY --from=builder /out/route-controller /route-controller
 COPY --from=builder /out/network-policy-controller /network-policy-controller
+COPY --from=builder /out/nwplcy-exporter /nwplcy-exporter

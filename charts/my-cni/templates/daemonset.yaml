@@ -11,6 +11,10 @@ spec:
     metadata:
       labels:
         app: my-cni
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9101"
+        prometheus.io/path: "/metrics"
     spec:
       hostNetwork: true
       serviceAccountName: my-cni
@@ -55,6 +59,24 @@ spec:
           volumeMounts:
             - name: xtables-lock
               mountPath: /run/xtables.lock
+        - name: nwplcy-exporter
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/nwplcy-exporter"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: xtables-lock
+              mountPath: /run/xtables.lock
+          ports:
+            - name: metrics
+              containerPort: 9101
+              protocol: TCP
       volumes:
         - name: cni-bin
           hostPath:
