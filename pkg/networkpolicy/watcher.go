@@ -61,6 +61,10 @@ func SetupWatcher(factory informers.SharedInformerFactory, s Store, q Enqueuer) 
 			newPod := newObj.(*corev1.Pod)
 			if !isPodReady(newPod) {
 				s.DeletePod(oldPod)
+				fmt.Printf("[pod] became not-ready: %s (%s/%s)\n", oldPod.Status.PodIP, oldPod.Namespace, oldPod.Name)
+				if oldPod.Status.PodIP != "" {
+					enqueue(q, Event{Type: EventPodDeleted, PodIPs: []string{oldPod.Status.PodIP}})
+				}
 				return
 			}
 			s.AddOrUpdatePod(newPod)
