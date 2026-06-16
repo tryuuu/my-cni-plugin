@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/coreos/go-iptables/iptables"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -92,6 +93,45 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("wrote %s (subnet: %s, gateway: %s)\n", confPath, node.Spec.PodCIDR, gw)
+
+	if err := setupMasquerade(clientset, node.Spec.PodCIDR); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to setup masquerade: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("set up MASQUERADE for %s\n", node.Spec.PodCIDR)
+}
+
+func setupMasquerade(clientset *kubernetes.Clientset, localPodCIDR string) error {
+	ipt, err := iptables.New()
+	if err != nil {
+		return fmt.Errorf("iptables init: %w", err)
+	}
+
+	const chain = "MY-CNI-MASQ"
+
+	_ = ipt.NewChain("nat", chain)
+	if err := ipt.ClearChain("nat", chain); err != nil {
+		return fmt.Errorf("clear chain %s: %w", chain, err)
+	}
+
+	nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("list nodes: %w", err)
+	}
+	for _, n := range nodes.Items {
+		if n.Spec.PodCIDR == "" {
+			continue
+		}
+		if err := ipt.Append("nat", chain, "-d", n.Spec.PodCIDR, "-j", "RETURN"); err != nil {
+			return fmt.Errorf("add RETURN rule for %s: %w", n.Spec.PodCIDR, err)
+		}
+	}
+
+	if err := ipt.Append("nat", chain, "-j", "MASQUERADE"); err != nil {
+		return fmt.Errorf("add MASQUERADE: %w", err)
+	}
+
+	return ipt.AppendUnique("nat", "POSTROUTING", "-s", localPodCIDR, "-j", chain)
 }
 
 func copyBinary(src, dst string) error {
